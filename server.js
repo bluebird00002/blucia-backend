@@ -106,6 +106,23 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "BluCia Labs API is running" });
 });
 
+// Root route - API information
+app.get("/", (req, res) => {
+  res.json({
+    message: "BluCia Labs API",
+    version: "1.0.0",
+    status: "running",
+    endpoints: {
+      health: "/api/health",
+      auth: "/api/auth",
+      requests: "/api/requests",
+      users: "/api/users",
+      admin: "/api/admin",
+    },
+    documentation: "This is a REST API backend. Use the endpoints above to interact with the API.",
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error("Error:", err);
