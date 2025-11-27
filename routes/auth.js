@@ -3,7 +3,7 @@ import passport from 'passport'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { body, validationResult } from 'express-validator'
-import db from '../config/database.js'
+import db from '../config/db.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { sendEmail, emailTemplates } from '../config/email.js'
 

@@ -1,6 +1,6 @@
 import express from 'express'
 import { body, validationResult } from 'express-validator'
-import db from '../config/database.js'
+import db from '../config/db.js'
 import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()

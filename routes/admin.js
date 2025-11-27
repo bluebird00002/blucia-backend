@@ -1,5 +1,5 @@
 import express from 'express'
-import db from '../config/database.js'
+import db from '../config/db.js'
 import { authenticateToken, isAdmin } from '../middleware/auth.js'
 import { sendEmail, emailTemplates } from '../config/email.js'
 
