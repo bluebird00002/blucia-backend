@@ -9,12 +9,20 @@ const createTransporter = () => {
   const transporter = nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE || 'gmail',
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: process.env.EMAIL_PORT || 587,
+    port: parseInt(process.env.EMAIL_PORT) || 587,
     secure: false, // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD, // Use App Password for Gmail
     },
+    // Connection timeout settings
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000, // 10 seconds
+    socketTimeout: 10000, // 10 seconds
+    // Retry settings
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 3,
   })
 
   return transporter
@@ -327,11 +335,29 @@ export const sendEmail = async (to, template, data = {}) => {
       text: emailContent.text,
     }
 
+    // Verify connection before sending
+    await transporter.verify()
+    console.log('✅ SMTP server connection verified')
+    
     const info = await transporter.sendMail(mailOptions)
     console.log('✅ Email sent:', info.messageId)
     return { success: true, messageId: info.messageId }
   } catch (error) {
     console.error('❌ Email sending failed:', error)
+    console.error('   Error code:', error.code)
+    console.error('   Error command:', error.command)
+    
+    // Provide helpful error messages
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+      console.error('   ⚠️  SMTP connection failed. Possible causes:')
+      console.error('   1. Email credentials not set in Render environment variables')
+      console.error('   2. Gmail App Password is incorrect')
+      console.error('   3. Render network blocking SMTP connections')
+      console.error('   4. Try using Resend or SendGrid instead of Gmail')
+    } else if (error.code === 'EAUTH') {
+      console.error('   ⚠️  Authentication failed. Check EMAIL_USER and EMAIL_PASSWORD')
+    }
+    
     return { success: false, error: error.message }
   }
 }
