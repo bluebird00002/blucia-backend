@@ -19,12 +19,22 @@ router.post('/register', [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
 ], async (req, res) => {
   try {
+    // Log request body for debugging
+    console.log('Registration request body:', req.body)
+    
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array())
       return res.status(400).json({ message: errors.array()[0].msg })
     }
 
     const { name, username, email, password } = req.body
+    
+    // Check if required fields are present
+    if (!name || !username || !email || !password) {
+      console.log('Missing required fields:', { name: !!name, username: !!username, email: !!email, password: !!password })
+      return res.status(400).json({ message: 'All fields are required' })
+    }
 
     // Check if user exists
     const [existingEmail] = await db.query('SELECT id FROM users WHERE email = ?', [email])
@@ -41,19 +51,69 @@ router.post('/register', [
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create user
-    const [result] = await db.query(
+    const [result, metadata] = await db.query(
       'INSERT INTO users (name, username, email, password, role) VALUES (?, ?, ?, ?, ?)',
       [name, username, email, hashedPassword, 'client']
     )
 
-    // Get created user
-    const [users] = await db.query(
-      'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE id = ?',
-      [result.insertId]
-    )
+    // Get created user - handle both PostgreSQL and MySQL
+    let user;
+    if (metadata.insertId) {
+      // MySQL: Use insertId to query for the user
+      const [users] = await db.query(
+        'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE id = ?',
+        [metadata.insertId]
+      )
+      if (users.length === 0) {
+        console.error('Failed to retrieve created user with insertId:', metadata.insertId)
+        // Fallback: query by email
+        const [usersByEmail] = await db.query(
+          'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE email = ?',
+          [email]
+        )
+        if (usersByEmail.length === 0) {
+          throw new Error('Failed to retrieve created user')
+        }
+        user = usersByEmail[0]
+      } else {
+        user = users[0]
+      }
+    } else if (result.length > 0 && result[0].id) {
+      // PostgreSQL: result contains the user data directly (from RETURNING clause)
+      // But we only have id, so we need to query for full user data
+      const [users] = await db.query(
+        'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE id = ?',
+        [result[0].id]
+      )
+      if (users.length === 0) {
+        console.error('Failed to retrieve created user with id:', result[0].id)
+        // Fallback: query by email
+        const [usersByEmail] = await db.query(
+          'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE email = ?',
+          [email]
+        )
+        if (usersByEmail.length === 0) {
+          throw new Error('Failed to retrieve created user')
+        }
+        user = usersByEmail[0]
+      } else {
+        user = users[0]
+      }
+    } else {
+      // Fallback: query by email (should always work if user was created)
+      console.log('Using fallback: querying user by email')
+      const [users] = await db.query(
+        'SELECT id, name, username, email, phone, google_id, avatar_url, role FROM users WHERE email = ?',
+        [email]
+      )
+      if (users.length === 0) {
+        throw new Error('Failed to retrieve created user')
+      }
+      user = users[0]
+    }
 
     // Generate token
-    const token = jwt.sign({ userId: users[0].id, role: users[0].role }, JWT_SECRET, { expiresIn: '7d' })
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
 
     // Send welcome email (non-blocking)
     sendEmail(email, emailTemplates.welcome(name)).catch(err => {
@@ -63,7 +123,7 @@ router.post('/register', [
     res.status(201).json({
       message: 'User created successfully. Please check your email for a welcome message.',
       token,
-      user: users[0]
+      user
     })
   } catch (error) {
     console.error('Registration error:', error)

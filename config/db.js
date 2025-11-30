@@ -38,6 +38,7 @@ if (process.env.NODE_ENV === 'production') {
       }
       
       // Return in MySQL format: [rows, metadata]
+      // For PostgreSQL INSERT with RETURNING, rows contains the returned data
       const metadata = insertId ? { insertId } : {};
       return [result.rows, metadata];
     } finally {
