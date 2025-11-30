@@ -1,37 +1,72 @@
-import nodemailer from 'nodemailer'
-import dotenv from 'dotenv'
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
-dotenv.config()
+dotenv.config();
 
 // Create reusable transporter
 const createTransporter = () => {
-  // Use Gmail by default, but support other SMTP services
-  const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  // Check if using Resend (recommended for cloud platforms)
+  if (process.env.EMAIL_HOST && process.env.EMAIL_HOST.includes("resend.com")) {
+    return nodemailer.createTransport({
+      host: "smtp.resend.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: "resend",
+        pass: process.env.EMAIL_PASSWORD, // Resend API key
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+    });
+  }
+
+  // Check if using SendGrid
+  if (
+    process.env.EMAIL_HOST &&
+    process.env.EMAIL_HOST.includes("sendgrid.net")
+  ) {
+    return nodemailer.createTransport({
+      host: "smtp.sendgrid.net",
+      port: 587,
+      secure: false,
+      auth: {
+        user: "apikey",
+        pass: process.env.EMAIL_PASSWORD, // SendGrid API key
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+    });
+  }
+
+  // Default: Gmail or custom SMTP
+  const config = {
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
     port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true for 465, false for other ports
+    secure: process.env.EMAIL_PORT === "465", // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD, // Use App Password for Gmail
+      pass: process.env.EMAIL_PASSWORD,
     },
-    // Connection timeout settings
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000, // 10 seconds
-    socketTimeout: 10000, // 10 seconds
-    // Retry settings
-    pool: true,
-    maxConnections: 1,
-    maxMessages: 3,
-  })
+    // Shorter timeouts for faster failure
+    connectionTimeout: 5000, // 5 seconds
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
+  };
 
-  return transporter
-}
+  // Use service if specified (for Gmail, Outlook, etc.)
+  if (process.env.EMAIL_SERVICE && !process.env.EMAIL_HOST) {
+    config.service = process.env.EMAIL_SERVICE;
+  }
+
+  return nodemailer.createTransport(config);
+};
 
 // Email templates
 export const emailTemplates = {
   welcome: (name) => ({
-    subject: 'Welcome to BluCia Labs! 🚀',
+    subject: "Welcome to BluCia Labs! 🚀",
     html: `
       <!DOCTYPE html>
       <html>
@@ -63,7 +98,9 @@ export const emailTemplates = {
                 <li>Update your profile information</li>
                 <li>Get 24/7 support from our team</li>
               </ul>
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard" class="button">Go to Dashboard</a>
+              <a href="${
+                process.env.FRONTEND_URL || "http://localhost:3000"
+              }/dashboard" class="button">Go to Dashboard</a>
               <p>If you have any questions, feel free to reach out to us at <a href="mailto:contact@blucialabs.com">contact@blucialabs.com</a></p>
               <p>Best regards,<br><strong>The BluCia Labs Team</strong></p>
             </div>
@@ -90,17 +127,19 @@ export const emailTemplates = {
       - Update your profile information
       - Get 24/7 support from our team
       
-      Visit your dashboard: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard
+      Visit your dashboard: ${
+        process.env.FRONTEND_URL || "http://localhost:3000"
+      }/dashboard
       
       If you have any questions, feel free to reach out to us at contact@blucialabs.com
       
       Best regards,
       The BluCia Labs Team
-    `
+    `,
   }),
 
   accountConfirmation: (name, confirmationLink) => ({
-    subject: 'Confirm Your BluCia Labs Account',
+    subject: "Confirm Your BluCia Labs Account",
     html: `
       <!DOCTYPE html>
       <html>
@@ -155,11 +194,11 @@ export const emailTemplates = {
       
       Best regards,
       The BluCia Labs Team
-    `
+    `,
   }),
 
   serviceRequestReceived: (name, requestId) => ({
-    subject: 'Service Request Received - BluCia Labs',
+    subject: "Service Request Received - BluCia Labs",
     html: `
       <!DOCTYPE html>
       <html>
@@ -185,7 +224,9 @@ export const emailTemplates = {
               <p>Thank you for submitting your service request to <strong>BluCia Labs</strong>!</p>
               <p>We have received your request (ID: <strong>${requestId}</strong>) and our team will review it shortly.</p>
               <p>You can track the status of your request in your dashboard.</p>
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard" class="button">View Dashboard</a>
+              <a href="${
+                process.env.FRONTEND_URL || "http://localhost:3000"
+              }/dashboard" class="button">View Dashboard</a>
               <p>We'll get back to you within 24 hours with next steps.</p>
               <p>If you have any urgent questions, please contact us at <a href="mailto:contact@blucialabs.com">contact@blucialabs.com</a></p>
               <p>Best regards,<br><strong>The BluCia Labs Team</strong></p>
@@ -207,16 +248,28 @@ export const emailTemplates = {
       We have received your request (ID: ${requestId}) and our team will review it shortly.
       
       You can track the status of your request in your dashboard.
-      Visit: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard
+      Visit: ${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard
       
       We'll get back to you within 24 hours with next steps.
       
       Best regards,
       The BluCia Labs Team
-    `
+    `,
   }),
 
-  adminRequestNotification: (clientName, clientEmail, requestId, serviceType, description, budget, timeline, clientType, companyName, companyLocation, projectReason) => ({
+  adminRequestNotification: (
+    clientName,
+    clientEmail,
+    requestId,
+    serviceType,
+    description,
+    budget,
+    timeline,
+    clientType,
+    companyName,
+    companyLocation,
+    projectReason
+  ) => ({
     subject: `🔔 New Service Request from ${clientName} - #${requestId}`,
     html: `
       <!DOCTYPE html>
@@ -250,27 +303,53 @@ export const emailTemplates = {
                 <div class="value">
                   <strong>Name:</strong> ${clientName}<br>
                   <strong>Email:</strong> ${clientEmail}<br>
-                  <strong>Type:</strong> ${clientType === 'company' ? 'Company' : 'Individual'}
-                  ${companyName ? `<br><strong>Company:</strong> ${companyName}` : ''}
-                  ${companyLocation ? `<br><strong>Location:</strong> ${companyLocation}` : ''}
+                  <strong>Type:</strong> ${
+                    clientType === "company" ? "Company" : "Individual"
+                  }
+                  ${
+                    companyName
+                      ? `<br><strong>Company:</strong> ${companyName}`
+                      : ""
+                  }
+                  ${
+                    companyLocation
+                      ? `<br><strong>Location:</strong> ${companyLocation}`
+                      : ""
+                  }
                 </div>
                 
                 <div class="label">Service Type:</div>
                 <div class="value">${serviceType}</div>
                 
-                ${projectReason ? `<div class="label">Project Reason:</div><div class="value">${projectReason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>` : ''}
+                ${
+                  projectReason
+                    ? `<div class="label">Project Reason:</div><div class="value">${projectReason
+                        .replace(/-/g, " ")
+                        .replace(/\b\w/g, (l) => l.toUpperCase())}</div>`
+                    : ""
+                }
                 
                 <div class="label">Project Description:</div>
                 <div class="value">${description}</div>
                 
-                ${budget ? `<div class="label">Budget:</div><div class="value">${budget}</div>` : ''}
-                ${timeline ? `<div class="label">Timeline:</div><div class="value">${timeline}</div>` : ''}
+                ${
+                  budget
+                    ? `<div class="label">Budget:</div><div class="value">${budget}</div>`
+                    : ""
+                }
+                ${
+                  timeline
+                    ? `<div class="label">Timeline:</div><div class="value">${timeline}</div>`
+                    : ""
+                }
                 
                 <div class="label">Request ID:</div>
                 <div class="value">#${requestId}</div>
               </div>
               
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin" class="button">View in Admin Dashboard</a>
+              <a href="${
+                process.env.FRONTEND_URL || "http://localhost:3000"
+              }/admin" class="button">View in Admin Dashboard</a>
               
               <p><strong>Action Required:</strong> Please review this request and update its status in the admin dashboard.</p>
               
@@ -298,69 +377,101 @@ export const emailTemplates = {
       PROJECT DESCRIPTION:
       ${description}
       
-      ${budget ? `BUDGET: ${budget}` : ''}
-      ${timeline ? `TIMELINE: ${timeline}` : ''}
+      ${budget ? `BUDGET: ${budget}` : ""}
+      ${timeline ? `TIMELINE: ${timeline}` : ""}
       
       REQUEST ID: #${requestId}
       
       ACTION REQUIRED:
       Please review this request and update its status in the admin dashboard.
-      Visit: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin
+      Visit: ${process.env.FRONTEND_URL || "http://localhost:3000"}/admin
       
       Best regards,
       BluCia Labs Automated System
-    `
-  })
-}
+    `,
+  }),
+};
 
 // Send email function
 export const sendEmail = async (to, template, data = {}) => {
   try {
     // Check if email is configured
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-      console.warn('⚠️  Email not configured. Email sending is disabled.')
-      console.warn('   Set EMAIL_USER and EMAIL_PASSWORD in .env to enable emails')
-      return { success: false, message: 'Email service not configured' }
+    if (!process.env.EMAIL_PASSWORD) {
+      console.warn("⚠️  Email not configured. EMAIL_PASSWORD is missing.");
+      console.warn(
+        "   Set EMAIL_PASSWORD in Render environment variables to enable emails"
+      );
+      return { success: false, message: "Email service not configured" };
     }
 
-    const transporter = createTransporter()
-    const emailContent = typeof template === 'function' ? template(data) : template
+    // For Resend, EMAIL_USER is optional
+    if (
+      !process.env.EMAIL_HOST?.includes("resend.com") &&
+      !process.env.EMAIL_USER
+    ) {
+      console.warn("⚠️  Email not configured. EMAIL_USER is missing.");
+      return { success: false, message: "Email service not configured" };
+    }
+
+    const transporter = createTransporter();
+    const emailContent =
+      typeof template === "function" ? template(data) : template;
+
+    // Determine "from" address based on service
+    let fromAddress = process.env.EMAIL_USER;
+    if (process.env.EMAIL_HOST?.includes("resend.com")) {
+      // Resend requires verified domain or uses onboarding@resend.dev
+      fromAddress = process.env.EMAIL_FROM || "onboarding@resend.dev";
+    }
 
     const mailOptions = {
-      from: `"BluCia Labs" <${process.env.EMAIL_USER}>`,
-      replyTo: process.env.BLUCIA_EMAIL || process.env.EMAIL_USER,
+      from: `"BluCia Labs" <${fromAddress}>`,
+      replyTo:
+        process.env.BLUCIA_EMAIL || process.env.EMAIL_USER || fromAddress,
       to: to,
       subject: emailContent.subject,
       html: emailContent.html,
       text: emailContent.text,
+    };
+
+    // Skip verification for Resend (it's faster and more reliable)
+    if (!process.env.EMAIL_HOST?.includes("resend.com")) {
+      try {
+        await transporter.verify();
+        console.log("✅ SMTP server connection verified");
+      } catch (verifyError) {
+        console.warn(
+          "⚠️  SMTP verification failed, but attempting to send anyway:",
+          verifyError.message
+        );
+      }
     }
 
-    // Verify connection before sending
-    await transporter.verify()
-    console.log('✅ SMTP server connection verified')
-    
-    const info = await transporter.sendMail(mailOptions)
-    console.log('✅ Email sent:', info.messageId)
-    return { success: true, messageId: info.messageId }
+    const info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent successfully:", info.messageId);
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Email sending failed:', error)
-    console.error('   Error code:', error.code)
-    console.error('   Error command:', error.command)
-    
+    console.error("❌ Email sending failed:", error.message);
+    console.error("   Error code:", error.code);
+
     // Provide helpful error messages
-    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-      console.error('   ⚠️  SMTP connection failed. Possible causes:')
-      console.error('   1. Email credentials not set in Render environment variables')
-      console.error('   2. Gmail App Password is incorrect')
-      console.error('   3. Render network blocking SMTP connections')
-      console.error('   4. Try using Resend or SendGrid instead of Gmail')
-    } else if (error.code === 'EAUTH') {
-      console.error('   ⚠️  Authentication failed. Check EMAIL_USER and EMAIL_PASSWORD')
+    if (error.code === "ETIMEDOUT" || error.code === "ECONNREFUSED") {
+      console.error(
+        "   ⚠️  SMTP connection timeout. Render may be blocking SMTP connections."
+      );
+      console.error(
+        "   💡 Solution: Use Resend (https://resend.com) - it works better with Render"
+      );
+      console.error("   💡 Or use SendGrid/Mailgun instead of Gmail");
+    } else if (error.code === "EAUTH") {
+      console.error(
+        "   ⚠️  Authentication failed. Check EMAIL_USER and EMAIL_PASSWORD"
+      );
     }
-    
-    return { success: false, error: error.message }
+
+    // Don't throw - just return failure so app continues working
+    return { success: false, error: error.message };
   }
-}
+};
 
-export default { sendEmail, emailTemplates }
-
+export default { sendEmail, emailTemplates };
