@@ -64,9 +64,10 @@ router.post(
 
       const [result] = await db.query(
         `INSERT INTO service_requests 
-         (user_id, name, email, phone, client_type, company_name, company_location, industry, project_reason, 
-          service_type, project_description, budget, budget_amount, budget_currency, timeline, hear_about_us) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+   (user_id, name, email, phone, client_type, company_name, company_location, industry, project_reason, 
+    service_type, project_description, budget, budget_amount, budget_currency, timeline, hear_about_us) 
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+   RETURNING id`,
         [
           req.userId,
           name,
@@ -87,7 +88,9 @@ router.post(
         ]
       );
 
-      if (!result.insertId) {
+      const insertId = result[0]?.id;
+
+      if (!insertId) {
         console.error("Insert failed, no insertId returned:", result);
         return res
           .status(500)
@@ -95,14 +98,12 @@ router.post(
       }
 
       const [requests] = await db.query(
-        "SELECT * FROM service_requests WHERE id = ?",
-        [result.insertId]
+        "SELECT * FROM service_requests WHERE id = $1",
+        [insertId]
       );
+
       if (!requests || requests.length === 0) {
-        console.error(
-          "No request found after insert with id:",
-          result.insertId
-        );
+        console.error("No request found after insert with id:", insertId);
         return res
           .status(500)
           .json({ message: "Failed to retrieve newly created request" });
